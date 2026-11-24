@@ -1,0 +1,90 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local player = Players.LocalPlayer
+
+-- ตั้งค่าเบื้องต้น (ปรับตัวเลขได้ตามต้องการ)
+local CONFIG = {
+	WalkSpeed = 32,
+	JumpPower = 75,
+	JumpHeight = 14,
+	ESP_Enabled = true,
+	Magnet_Enabled = true,
+	Magnet_Range = 25,
+}
+
+-- 1. วิ่งเร็ว และ กระโดดสูง
+local function updateMovement(character)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
+
+	humanoid.WalkSpeed = CONFIG.WalkSpeed
+	if humanoid.UseJumpPower then
+		humanoid.JumpPower = CONFIG.JumpPower
+	else
+		humanoid.JumpHeight = CONFIG.JumpHeight
+	end
+end
+
+-- 2. มองทะลุ (Highlight ผู้เล่นอื่น)
+local function applyESP(targetPlayer)
+	if targetPlayer == player then return end
+
+	local function onCharacterAdded(char)
+		task.wait(0.2)
+		if not CONFIG.ESP_Enabled then return end
+		if char:FindFirstChild("DeltaESP_Highlight") then return end
+
+		local highlight = Instance.new("Highlight")
+		highlight.Name = "DeltaESP_Highlight"
+		highlight.FillTransparency = 0.65
+		highlight.OutlineTransparency = 0
+		highlight.Parent = char
+	end
+
+	if targetPlayer.Character then
+		onCharacterAdded(targetPlayer.Character)
+	end
+	targetPlayer.CharacterAdded:Connect(onCharacterAdded)
+end
+
+for _, plr in ipairs(Players:GetPlayers()) do
+	applyESP(plr)
+end
+Players.PlayerAdded:Connect(applyESP)
+
+-- 3. ดูดของเข้าหาตัวละคร (ดึงชิ้นส่วนที่หล่นอยู่ใกล้ๆ)
+local function pullNearbyItems()
+	if not CONFIG.Magnet_Enabled then return end
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+
+	-- ปรับชื่อโฟลเดอร์หรือเงื่อนไขให้ตรงกับไอเทมในแมป Block Spin
+	for _, obj in ipairs(Workspace:GetDescendants()) do
+		if obj:IsA("BasePart") and not obj:IsDescendantOf(char) then
+			local isDroppedItem = obj:GetAttribute("IsItem") or obj.Name:lower():find("drop") or obj.Name:lower():find("loot") or obj.Name:lower():find("cash")
+			if isDroppedItem then
+				local dist = (obj.Position - root.Position).Magnitude
+				if dist <= CONFIG.Magnet_Range then
+					obj.Anchored = false
+					obj.CanCollide = false
+					obj.CFrame = root.CFrame * CFrame.new(0, 1, -2)
+				end
+			end
+		end
+	end
+end
+
+-- ลูปทำงานต่อเนื่อง
+RunService.Heartbeat:Connect(function()
+	if player.Character then
+		updateMovement(player.Character)
+	end
+	pullNearbyItems()
+end)
+
+player.CharacterAdded:Connect(function(char)
+	updateMovement(char)
+end)
